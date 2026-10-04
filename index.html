@@ -221,7 +221,6 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--t);m
 .hnum{text-align:right;font-family:'DM Mono',monospace}
 .hhd .hnum{font-family:inherit}
 .htag{font-size:9px;padding:1px 6px;border-radius:8px;background:rgba(255,170,61,.12);color:var(--ora);font-weight:500}
-.hnote{font-size:10px;color:var(--t3);padding:9px 16px;border-top:1px solid var(--b)}
 .fixwk{padding:10px 0;border-bottom:1px solid var(--b)}
 .fixwk:last-child{border-bottom:none}
 .fixhd{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--t2);font-family:'DM Mono',monospace;margin-bottom:8px}
@@ -444,7 +443,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--t);m
       <div class="lbtitle">🏆 排行榜</div>
       <div class="lbsub">綠點=達標・藍點=請假・紅點=缺席</div>
       <div id="lbsummary"></div>
-      <div class="sec" style="margin-top:1.5rem">個人排行（7 月起）</div>
+      <div class="sec" style="margin-top:1.5rem">個人排行</div>
       <div class="mtabs" id="mtabs"></div>
       <div id="pay-action"></div>
       <div class="stat4" id="lbstats"></div>
@@ -769,6 +768,12 @@ function allWeeks(){
   while(m<=t){ ws.push(new Date(m)); m=new Date(m); m.setDate(m.getDate()+7); }
   return ws;
 }
+// 已結算的週：週日結束、隔週一補登日也過了（週二起）才算定案
+function isSettled(mon){
+  const t=new Date(); t.setHours(0,0,0,0);
+  const nextMon=new Date(mon); nextMon.setDate(mon.getDate()+7);
+  return t>nextMon;
+}
 // 排行榜月份歸屬：6/29 那週(週一在 6 月)歸到 7 月個人排行；個人榜自 7 月起
 const LB_W1KEY=fmt(WEEK1);
 const lbMonthKey=mon=> wkKey(mon)===LB_W1KEY ? '2026-07' : mkey(mon);
@@ -1064,9 +1069,9 @@ function monthStats(mk){
 }
 function renderLbSummary(){
   const el=document.getElementById('lbsummary'); if(!el) return;
-  const curMk=lbMonthKey(getMon(0));
-  // 進行中的月份（含最後一週尚未結束）不列數字、不計入累積，結算後才呈現
-  const auto=lbMonths().filter(mk=>mk>=AUTO_FROM).map(mk=>({label:parseInt(mk.split('-')[1])+'月',live:mk===curMk,...(mk===curMk?{}:monthStats(mk))}));
+  // 進行中的月份（還有未結算的週）不列數字、不計入累積，結算後才呈現
+  const isLive=mk=>allWeeks().some(w=>lbMonthKey(w)===mk&&!isSettled(w));
+  const auto=lbMonths().filter(mk=>mk>=AUTO_FROM).map(mk=>({label:parseInt(mk.split('-')[1])+'月',live:isLive(mk),...(isLive(mk)?{}:monthStats(mk))}));
   const months=[...HISTORY,...auto];
   const sinceMay=months.reduce((s,h)=>s+(h.live?0:h.fine),0);
   const money=n=>'NT$'+n.toLocaleString();
@@ -1080,9 +1085,7 @@ function renderLbSummary(){
       </div>
       <div class="hrow hhd"><div>期間</div><div class="hnum">打卡</div><div class="hnum">人數</div><div class="hnum">罰款</div></div>
       ${row('第一屆','—',FIRST_SEASON.people,FIRST_SEASON.fine,'hfirst')}
-      ${months.map(h=>h.live?row(h.label+'<span class="htag">進行中</span>','—','—',null):row(h.label,h.ck,h.people,h.fine)).join('')}
-      <div class="hnote">9 月起依打卡紀錄自動統計・進行中的月份結算後才計入</div>
-    </div>`;
+      ${months.map(h=>h.live?row(h.label+'<span class="htag">進行中</span>','—','—',null):row(h.label,h.ck,h.people,h.fine)).join('')}    </div>`;
 }
 
 function renderLb(){
@@ -1100,7 +1103,8 @@ function renderLb(){
     months.map(mk=>`<button class="mtab${mk===lbMk?' on':''}" onclick="setLbMk('${mk}')">${mlabel(mk)}</button>`).join('')
     +`<button class="mtab${lbMk==='all'?' on':''}" onclick="setLbMk('all')">全部累積</button>`;
 
-  const isAll=lbMk==='all',tgtM=isAll?months:[lbMk],wks=allWeeks();
+  // 全部累積只計已結算的週（不含本週與週一可補登的上週）
+  const isAll=lbMk==='all',tgtM=isAll?months:[lbMk],wks=isAll?allWeeks().filter(isSettled):allWeeks();
   document.getElementById('pay-action').innerHTML=!isAll
     ?`<div class="arow" style="margin-bottom:1rem"><button class="abtn ab" onclick="reqPayment('${lbMk}')">💰 記錄 ${mlabel(lbMk)} 繳款</button><button class="abtn" onclick="reqFix('${lbMk}')">✏️ 更正打卡</button></div>`
     :'';
